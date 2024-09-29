@@ -7,60 +7,71 @@ import (
 	"net/http"
 )
 
+type createSongRequest struct {
+	Group string `json:"group" binding:"required"`
+	Song  string `json:"song" binding:"required"`
+}
+
+type createSongResponse struct {
+	ID          int    `json:"id"`
+	Group       string `json:"group"`
+	Song        string `json:"song"`
+	ReleaseDate string `json:"release_date"`
+	Text        string `json:"text"`
+	Link        string `json:"link"`
+}
+
 func main() {
-	r := gin.Default()
 	repo := repository.NewSongRepositoryInMemory()
+	r := setupRouter(repo)
 
-	r.POST("api/v1/song", func(c *gin.Context) {
-		type createSongRequest struct {
-			Group string `json:"group" binding:"required"`
-			Song  string `json:"song" binding:"required"`
-		}
+	if err := r.Run("127.0.0.1:8081"); err != nil {
+		println(err.Error())
+	}
+}
 
+func setupRouter(repo repository.SongRepository) *gin.Engine {
+	r := gin.Default()
+	r.POST("/api/v1/song", createSongHandler(repo))
+	r.GET("/api/v1/songs", allSongsHandler(repo))
+	return r
+}
+
+func createSongHandler(repo repository.SongRepository) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var request createSongRequest
-
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			handleError(c, err, http.StatusBadRequest)
 			return
 		}
 
 		uc := usecase.NewCreateSongUseCase(repo)
 		song, err := uc.Handle(request.Group, request.Song)
-
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			handleError(c, err, http.StatusBadRequest)
 			return
-		}
-
-		type createSongResponse struct {
-			ID          int
-			Group       string
-			Song        string
-			ReleaseDate string
-			Text        string
-			Link        string
 		}
 
 		c.JSON(http.StatusCreated, gin.H{
 			"message": "Song created successfully",
 			"song":    createSongResponse{song.ID, song.Group, song.Song, song.ReleaseDate, song.Text, song.Link},
 		})
-	})
+	}
+}
 
-	r.GET("api/v1/songs", func(c *gin.Context) {
+func allSongsHandler(repo repository.SongRepository) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		uc := usecase.NewAllSongsUseCase(repo)
 		songs, err := uc.Handle()
-
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			handleError(c, err, http.StatusInternalServerError)
 			return
 		}
 
-		c.JSON(http.StatusCreated, songs)
-	})
-
-	err := r.Run("127.0.0.1:8081")
-	if err != nil {
-		println(err.Error())
+		c.JSON(http.StatusOK, songs)
 	}
+}
+
+func handleError(c *gin.Context, err error, status int) {
+	c.JSON(status, gin.H{"error": err.Error()})
 }
