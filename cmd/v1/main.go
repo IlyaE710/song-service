@@ -47,6 +47,18 @@ func main() {
 		})
 	})
 
+	r.GET("api/v1/songs", func(c *gin.Context) {
+		uc := usecase.NewAllSongsUseCase(repo)
+		songs, err := uc.Handle()
+
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusCreated, songs)
+	})
+
 	err := r.Run("127.0.0.1:8081")
 	if err != nil {
 		println(err.Error())
